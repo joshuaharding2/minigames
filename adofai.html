@@ -137,7 +137,8 @@
         const ORBIT_RADIUS = TILE_SIZE;
         const BASE_SPEED = 0.08;
         const TOLERANCE = 1;
-        const SPEED_INCREMENT = 0.02; // How much faster every 25 tiles
+        const SPEED_INCREMENT = 0.008; // How much faster every 25 tiles
+        const SPEED_COMMONNESS = 1;
 
         // State
         let isPlaying = false;
@@ -359,7 +360,7 @@
             isRedAnchored = !isRedAnchored;
 
             // 1. Speed up check (Every 25 tiles)
-            if (score % 10 === 0) {
+            if (score % SPEED_COMMONNESS === 0) {
                 speed += SPEED_INCREMENT;
                 playSound('speed');
                 showFloatText("SPEED UP!");
@@ -423,7 +424,7 @@
 
                 // Safety Cap (1.5 rads). If diff is huge, we are just starting the orbit, not failing.
                 if (rotationDirection > 0) {
-                    if (diff > TOLERANCE && diff < 1.5) failGame();
+                    if (diff > TOLERANCE && diff < 1.5) failGame();;
                 } else {
                     if (diff < -TOLERANCE && diff > -1.5) failGame();
                 }
@@ -510,7 +511,7 @@
                     const ty = tiles[i].y * TILE_SIZE;
 
                     // Speed Marker Check
-                    const isSpeedTile = (i % 10 === 0 && i !== 0);
+                    const isSpeedTile = (i % SPEED_COMMONNESS === 0 && i !== 0);
 
                     ctx.strokeStyle = isSpeedTile ? "#ffd700" : "#444";
                     ctx.strokeRect(tx - TILE_SIZE / 3, ty - TILE_SIZE / 3, TILE_SIZE / 1.5, TILE_SIZE / 1.5);
