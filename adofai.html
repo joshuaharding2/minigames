@@ -359,7 +359,7 @@
             isRedAnchored = !isRedAnchored;
 
             // 1. Speed up check (Every 25 tiles)
-            if (score % 25 === 0) {
+            if (score % 10 === 0) {
                 speed += SPEED_INCREMENT;
                 playSound('speed');
                 showFloatText("SPEED UP!");
@@ -510,7 +510,7 @@
                     const ty = tiles[i].y * TILE_SIZE;
 
                     // Speed Marker Check
-                    const isSpeedTile = (i % 25 === 0 && i !== 0);
+                    const isSpeedTile = (i % 10 === 0 && i !== 0);
 
                     ctx.strokeStyle = isSpeedTile ? "#ffd700" : "#444";
                     ctx.strokeRect(tx - TILE_SIZE / 3, ty - TILE_SIZE / 3, TILE_SIZE / 1.5, TILE_SIZE / 1.5);
