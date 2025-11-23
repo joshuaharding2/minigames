@@ -137,8 +137,8 @@
         const ORBIT_RADIUS = TILE_SIZE;
         const BASE_SPEED = 0.08;
         const TOLERANCE = 1;
-        const SPEED_INCREMENT = 0.008; // How much faster every 25 tiles
-        const SPEED_COMMONNESS = 1;
+        const SPEED_INCREMENT = 0.02; // How much faster every 25 tiles
+        const SPEED_COMMONNESS = 25;
 
         // State
         let isPlaying = false;
@@ -376,9 +376,8 @@
             const el = document.createElement('div');
             el.className = 'float-text';
             el.innerText = text;
-            el.style.left = '50%';
+            el.style.justifySelf = 'center';
             el.style.top = '40%';
-            el.style.transform = 'translateX(-50%)';
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 1000);
         }
@@ -477,25 +476,70 @@
                 const startIdx = Math.max(0, currentTileIndex - lookBack);
                 const endIdx = Math.min(tiles.length, currentTileIndex + lookAhead);
 
-                // 1. Draw Connections (Lines)
-                for (let i = startIdx; i < endIdx - 1; i++) {
-                    // Fog of War Calculation
+                // 1. Draw Connections (Interleaved Algorithm)
+
+                // Helper: Draw just the colored outline of a segment
+                function drawOutline(i) {
+                    if (i < 0 || i >= tiles.length - 1) return;
+
+                    // Opacity Calculation
                     const dist = i - currentTileIndex;
                     let opacity = 1;
-                    if (dist > 6) {
-                        opacity = 1 - ((dist - 6) / 4); // Fade out from 6 to 10
-                    }
+                    if (dist > 6) opacity = 1 - ((dist - 6) / 4);
                     if (opacity < 0) opacity = 0;
-
                     ctx.globalAlpha = opacity;
-                    ctx.beginPath();
-                    ctx.strokeStyle = "#333";
-                    ctx.lineWidth = TILE_SIZE * 0.4;
+
+                    const isSpeed = (i % SPEED_COMMONNESS === 0 && i !== 0);
+                    ctx.strokeStyle = "#555";
+                    ctx.lineWidth = TILE_SIZE * 0.4; // Thick Border
                     ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+
+                    ctx.beginPath();
                     ctx.moveTo(tiles[i].x * TILE_SIZE, tiles[i].y * TILE_SIZE);
                     ctx.lineTo(tiles[i + 1].x * TILE_SIZE, tiles[i + 1].y * TILE_SIZE);
                     ctx.stroke();
                 }
+
+                // Helper: Draw just the inner road of a segment
+                function drawInner(i) {
+                    if (i < 0 || i >= tiles.length - 1) return;
+
+                    // Opacity Calculation
+                    const dist = i - currentTileIndex;
+                    let opacity = 1;
+                    if (dist > 6) opacity = 1 - ((dist - 6) / 4);
+                    if (opacity < 0) opacity = 0;
+                    ctx.globalAlpha = opacity;
+
+                    ctx.strokeStyle = "#222"; // Dark Road
+                    ctx.lineWidth = TILE_SIZE * 0.3; // Thin Inner
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+
+                    ctx.beginPath();
+                    ctx.moveTo(tiles[i].x * TILE_SIZE, tiles[i].y * TILE_SIZE);
+                    ctx.lineTo(tiles[i + 1].x * TILE_SIZE, tiles[i + 1].y * TILE_SIZE);
+                    ctx.stroke();
+                }
+
+                // --- THE ALGORITHM ---
+                // We render from Back (Furthest visible) to Front (Player)
+                // Sequence: Outline(N), Outline(N-1), Inner(N), Outline(N-2), Inner(N-1)...
+
+                const lastVisible = endIdx - 1;
+
+                // 1. Start with the very last outline
+                drawOutline(lastVisible);
+
+                // 2. Loop backwards
+                for (let i = lastVisible; i > startIdx; i--) {
+                    drawOutline(i - 1); // Draw the outline "behind" the current one
+                    drawInner(i);       // Draw the inner of the current one (covers the outline we just drew)
+                }
+
+                // 3. Finish with the closest inner tile
+                drawInner(startIdx);
 
                 // 2. Draw Tiles
                 ctx.lineWidth = 2;
