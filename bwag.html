@@ -1,0 +1,478 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <title>Blob with a Gun</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee+Spice&display=swap" rel="stylesheet">
+    <style>
+        body { display: flex; height: 100vh; justify-content: center; align-items: center; background-color: #111; color: white; font-family: sans-serif; margin: 0; overflow: hidden; flex-direction: column; }
+        canvas { display: none; }
+        #menu { display: flex; flex-direction: row; align-items: center; gap: 16px; }
+        .difficultyButton { font-size: 2rem; margin-top: 10px; padding: 0.5rem 1rem; background: #212121; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .title { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 100px; color: white; background: rgba(0, 0, 0, 0); padding: 10px; border-radius: 5px; font-family: "Bungee Spice", sans-serif; display: block; max-width: 90%; text-align: center; white-space: nowrap; }
+        .info { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); font-size: 20px; color: white; background: rgba(0, 0, 0 ,0); padding: 5px; border-radius: 5px; font-family: sans-serif; display: block; max-width: 90%; text-align: center; }
+        #menu button:hover { color: white; transform: scale(1.05); transition: transform 0.3s; }
+        #startEasy { background-color: #4CAF50; }
+        #startMedium { background-color: #2196F3; }
+        #startHard { background-color: #FF9800; }
+        #startImpossible { background-color: #F44336; }
+        #startCustom { background-color: #888; }
+        #actuallyStartCustom { background-color: #4CAF50; }
+        #menu button:active { transform: scale(0.95); }
+        #customSettingsForm { display: none; flex-direction: column; align-items: center; gap: 10px; border-radius: 10px; color: white; }
+        .customSettingsInput { display: none; width: 400px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #222; color: white; font-size: 16px; }
+        #customSettingsInputWrapper { display: none; flex-direction: column; align-items: center; gap: 10px; }
+        .customSettingsInputRow { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+        .customSettingsCheckbox { width: 14px; height: 14px; cursor: pointer; }
+        .customSettingsCheckboxLabel { display: flex; width: 400px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #222; color: white; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="title">BLOB WITH A GUN<br></div>
+    <div class="info">v1.1.0<br>Joshua Harding & Ben Messer<br>Goal: Cover 90% of the battlefield in your enemy's blood<br>Press a button to start</div>
+    <div id="menu">
+        <button id="startEasy" class="difficultyButton" onclick="startGame('easy')">Easy</button>
+        <button id="startMedium" class="difficultyButton" onclick="startGame('medium')">Medium</button>
+        <button id="startHard" class="difficultyButton" onclick="startGame('hard')">Hard</button>
+        <button id="startImpossible" class="difficultyButton" onclick="startGame('impossible')">Impossible</button>
+        <button id="startCustom" class="difficultyButton" onclick="startCustom()">Custom</button>
+    </div>
+    <form id="customSettingsForm">
+        <h1>Custom Game Settings</h1>
+        <h2 style="margin-top: -10px">Input your settings:</h2>
+        <div id="customSettingsInputWrapper">
+            <div id="customSettingsInputRow1" class="customSettingsInputRow">
+                <input type="number" id="enemySpeed" class="customSettingsInput" placeholder="Enemy speed (default: 1.5)" step="0.1" autocomplete="off">
+                <input type="number" id="playerSpeed" class="customSettingsInput" placeholder="Player speed (default: 4)" step="0.1" autocomplete="off">
+            </div>
+            <div id="customSettingsInputRow2" class="customSettingsInputRow">
+                <input type="number" id="shootInterval" class="customSettingsInput" placeholder="Enemy shoot cooldown (default: 1500)" step="100" autocomplete="off">
+                <input type="number" id="playerShootInterval" class="customSettingsInput" placeholder="Player shoot cooldown (default: none)" step="100" autocomplete="off">
+            </div>
+            <div id="customSettingsInputRow3" class="customSettingsInputRow">
+                <input type="number" id="enemyBulletSpeed" class="customSettingsInput" placeholder="Enemy Bullet Speed (default: 5)" step="0.1" autocomplete="off">
+                <input type="number" id="playerBulletSpeed" class="customSettingsInput" placeholder="Player Bullet Speed (default: 10)" step="0.1" autocomplete="off">
+            </div>
+            <div id="customSettingsInputRow4" class="customSettingsInputRow">
+                <input type="number" id="spawnChance" class="customSettingsInput" placeholder="Enemy spawn chance (default: 0.05)" step="0.01" autocomplete="off">
+                <input type="number" id="maxEnemies" class="customSettingsInput" placeholder="Max enemies (default: 10)" step="1" autocomplete="off">
+            </div>
+            <div id="customSettingsInputRow5" class="customSettingsInputRow">
+                <input type="number" id="splatterSize" class="customSettingsInput" placeholder="Blood size (default: 100)" step="1" autocomplete="off">
+                <input type="number" id="maxBounces" class="customSettingsInput" placeholder="Bullet bounces before despawn (default: 3)" step="1" autocomplete="off">
+            </div>
+            <div id="customSettingsInputRow6" class="customSettingsInputRow">
+                <label class="customSettingsCheckboxLabel"><input type="checkbox" id="invulnerableToEnemyBullets" class="customSettingsCheckbox">Invulnerable to enemy bullets</label>
+                <label class="customSettingsCheckboxLabel"><input type="checkbox" id="invulnerableToPlayerBullets" class="customSettingsCheckbox">Invulnerable to player bullets</label>
+            </div>
+            <div id="customSettingsInputRow7" class="customSettingsInputRow">
+                <label class="customSettingsCheckboxLabel"><input type="checkbox" id="invulnerableToEnemyBody" class="customSettingsCheckbox">Invulnerable to enemy body</label>
+                <label class="customSettingsCheckboxLabel"><input type="checkbox" id="invulnerableToWalls" class="customSettingsCheckbox">Invulnerable to walls</label>
+            </div>
+        </div>
+        <button type="button" id="actuallyStartCustom" class="difficultyButton" onclick="startGameWithCustomSettings()">Start</button>
+    </form>
+    <canvas id="game"></canvas>
+    <script>
+        function startCustom() {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('customSettingsForm').style.display = 'flex';
+            document.getElementById('customSettingsInputWrapper').style.display = 'flex';
+            const inputs = document.querySelectorAll('.customSettingsInput');
+            inputs.forEach(input => {
+                input.style.display = 'flex';
+            });
+        }
+        function startGameWithCustomSettings() {
+            const settings = {
+                enemySpeed: parseFloat(document.getElementById('enemySpeed').value) || 1.5,
+                playerSpeed: parseFloat(document.getElementById('playerSpeed').value) || 4,
+                spawnChance: parseFloat(document.getElementById('spawnChance').value) || 0.05,
+                shootInterval: parseInt(document.getElementById('shootInterval').value) || 1500,
+                playerShootInterval: parseInt(document.getElementById('playerShootInterval').value) || 0,
+                enemyBulletSpeed: parseFloat(document.getElementById('enemyBulletSpeed').value) || 5,
+                playerBulletSpeed: parseFloat(document.getElementById('playerBulletSpeed').value) || 5,
+                splatterSize: parseFloat(document.getElementById('splatterSize').value) || 100,
+                maxEnemies: parseInt(document.getElementById('maxEnemies').value) || 10,
+                maxBounces: parseInt(document.getElementById('maxBounces').value) || 3,
+                invulnerableToEnemyBullets: document.getElementById('invulnerableToEnemyBullets').checked,
+                invulnerableToPlayerBullets: document.getElementById('invulnerableToPlayerBullets').checked,
+                invulnerableToEnemyBody: document.getElementById('invulnerableToEnemyBody').checked,
+                invulnerableToWalls: document.getElementById('invulnerableToWalls').checked
+            };
+            document.getElementById('customSettingsForm').style.display = 'none';
+            startGame("custom", settings);
+        }
+        function startGame(gameDifficulty, customSettings = null) {
+            document.querySelector(".title").style.display = "none";
+            document.querySelector(".info").style.display = "none";
+            document.getElementById('menu').style.display = 'none';
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            canvas.style.display = 'block'; // Show canvas
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const BASE_WIDTH = 1920;
+            const BASE_HEIGHT = 1080;
+            const unitScale = Math.min(canvas.width / BASE_WIDTH, canvas.height / BASE_HEIGHT);
+            const difficultySettings = {
+                easy: {
+                    enemySpeed: 1,
+                    spawnChance: 0.02,
+                    shootInterval: 2000,
+                    enemyBulletSpeed: 3,
+                    splatterSize: 150,
+                    maxEnemies: 5,
+                    maxBounces: 2
+                },
+                medium: {
+                    enemySpeed: 1.5,
+                    spawnChance: 0.05,
+                    shootInterval: 1500,
+                    enemyBulletSpeed: 5,
+                    splatterSize: 100,
+                    maxEnemies: 10,
+                    maxBounces: 3
+                },
+                hard: {
+                    enemySpeed: 2,
+                    spawnChance: 0.08,
+                    shootInterval: 1200,
+                    enemyBulletSpeed: 7,
+                    splatterSize: 50,
+                    maxEnemies: 15,
+                    maxBounces: 5
+                },
+                impossible: {
+                    enemySpeed: 2.5,
+                    spawnChance: 0.10,
+                    shootInterval: 1000,
+                    enemyBulletSpeed: 10,
+                    splatterSize: 30,
+                    maxEnemies: 30,
+                    maxBounces: Infinity
+                },
+                custom: customSettings
+            };
+            const settings = difficultySettings[gameDifficulty];
+            const bullets = [];
+            const bloodSplatters = [];
+            const enemies = [];
+            let aliveEnemies = enemies.filter(e => e.alive).length;
+            let keys = {};
+            let mouse = { x: 0, y: 0 };
+            let youWin = false;
+            let gameOver = false;
+            let gameOverTime = 0;
+            const BASE_BULLET_RADIUS = 5;
+            const blob = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: 20,
+                speed: settings.playerSpeed || 4,
+                lastShotTime: 0
+            };
+            canvas.addEventListener('mousemove', e => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            });
+            window.addEventListener('keydown', e => keys[/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : e.key] = true);
+            window.addEventListener('keyup', e => keys[/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : e.key] = false);
+            window.addEventListener("keydown", e => {
+                if (e.key === "r" || e.key === "R") {
+                    restartGame();
+                }
+            });
+            window.addEventListener("mousedown", () => {
+                const now = Date.now();
+                if (gameOver && now - gameOverTime > 500) {
+                    restartGame();
+                }
+                if (now - blob.lastShotTime > (settings.playerShootInterval || 0)) {
+                    shootBullet(blob.x, blob.y, mouse.x, mouse.y, "player");
+                    blob.lastShotTime = now;
+                }
+            });
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+            function shootBullet(fromX, fromY, toX, toY, owner) {
+                const angle = Math.atan2(toY - fromY, toX - fromX);
+                const offset = 30;
+                bullets.push({
+                    x: fromX + Math.cos(angle) * offset,
+                    y: fromY + Math.sin(angle) * offset,
+                    vx: Math.cos(angle) * calculateBulletSpeed(owner),
+                    vy: Math.sin(angle) * calculateBulletSpeed(owner),
+                    radius: BASE_BULLET_RADIUS,
+                    owner: owner,
+                    bounces: 0
+                });
+            }
+            function calculateBulletSpeed(owner) {
+                if (owner === "player") {
+                    return settings.playerBulletSpeed || Math.min(10, settings.enemyBulletSpeed * 2);
+                } else {
+                    return settings.enemyBulletSpeed;
+                }
+            }
+            function trySpawnEnemy() {
+                const maxEnemies = settings.maxEnemies;
+                if (aliveEnemies >= maxEnemies) return;
+                const scarcityFactor = Math.max(1, (aliveEnemies));
+                if (Math.random() < settings.spawnChance / (scarcityFactor) * 5) {
+                    let spawnX, spawnY;
+                    const safeRadius = 300; // Minimum distance from player
+                    do {
+                        spawnX = Math.random() * canvas.width;
+                        spawnY = Math.random() * canvas.height;
+                    } while (Math.hypot(spawnX - blob.x, spawnY - blob.y) < safeRadius);
+                    enemies.push({
+                        x: spawnX,
+                        y: spawnY,
+                        radius: 20,
+                        speed: settings.enemySpeed,
+                        alive: true,
+                        lastShotTime: 0,
+                        shootInterval: settings.shootInterval
+                    });
+                }
+            }   
+            function update() {
+                if (gameOver) return;
+                if (keys['w']) blob.y -= blob.speed;
+                if (keys['s']) blob.y += blob.speed;
+                if (keys['a']) blob.x -= blob.speed;
+                if (keys['d']) blob.x += blob.speed;
+                if ( blob.x < 0 || blob.x > canvas.width || blob.y < 0 || blob.y > canvas.height) {
+                    if (!settings.invulnerableToWalls) {
+                        endGame();
+                        return;
+                    }
+                }
+                aliveEnemies = enemies.filter(e => e.alive).length;
+                if (aliveEnemies <= 0) {
+                    trySpawnEnemy();
+                }
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.x += b.vx;
+                    b.y += b.vy;
+                    if (b.x <= 0 || b.x >= canvas.width) {
+                        b.bounces++;
+                        if (b.bounces > settings.maxBounces) {
+                            bullets.splice(i, 1);
+                            continue;
+                        }
+                        b.vx *= -1;
+                        trySpawnEnemy();
+                    }
+                    if (b.y <= 0 || b.y >= canvas.height) {
+                        b.bounces++;
+                        if (b.bounces > settings.maxBounces) {
+                            bullets.splice(i, 1);
+                            continue;
+                        }
+                        b.vy *= -1;
+                        trySpawnEnemy();
+                    }
+                    const dxP = b.x - blob.x;
+                    const dyP = b.y - blob.y;
+                    const distP = Math.hypot(dxP, dyP);
+                    if (distP < blob.radius + b.radius) {
+                        if (b.owner === "player" && !settings.invulnerableToPlayerBullets) endGame();
+                        if (b.owner === "enemy" && !settings.invulnerableToEnemyBullets) endGame();
+                    }
+                    for (const enemy of enemies) {
+                        if (!enemy.alive) continue;
+                        const dx = b.x - enemy.x;
+                        const dy = b.y - enemy.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < enemy.radius + b.radius) {
+                            if (b.radius > BASE_BULLET_RADIUS) {
+                                b.radius *= 0.75;
+                            } else {
+                                bullets.splice(i, 1);
+                            }
+                            // Splat that sucker
+                            bloodSplatters.push({
+                                x: enemy.x,
+                                y: enemy.y,
+                                radius: enemy.radius + settings.splatterSize
+                            });
+                            enemy.alive = false;
+                            break;
+                        }
+                    }
+                    if (b.radius < 1) bullets.splice(i, 1);
+                }
+                mergeBullets(bullets);
+                for (const enemy of enemies) {
+                    if (!enemy.alive) continue;
+                    const dx = blob.x - enemy.x;
+                    const dy = blob.y - enemy.y;
+                    const dist = Math.hypot(dx, dy);
+                    enemy.x += (dx / dist) * enemy.speed;
+                    enemy.y += (dy / dist) * enemy.speed;
+                    if (dist < blob.radius + enemy.radius && !settings.invulnerableToEnemyBody) {
+                        endGame();
+                    }
+                    const now = Date.now();
+                    if (now - enemy.lastShotTime > enemy.shootInterval) {
+                        shootBullet(enemy.x, enemy.y, blob.x, blob.y, 'enemy');
+                        enemy.lastShotTime = now;
+                    }
+                }
+                coverage = checkBloodFlood();
+                if (coverage >= 0.9 && !youWin) {
+                    youWin = true;
+                    endGame();
+                }
+            }
+            function endGame() {
+                gameOver = true;
+                gameOverTime = Date.now();
+            }
+            function checkBloodFlood() {
+                const sampleStep = 10;
+                const width = canvas.width;
+                const height = canvas.height;
+                const imageData = ctx.getImageData(0, 0, width, height);
+                const pixels = imageData.data;
+                let redPixelCount = 0;
+                let sampleCount = 0;
+                for (let y = 0; y < height; y += sampleStep) {
+                    for (let x = 0; x < width; x += sampleStep) {
+                        const index = (y * width + x) * 4;
+                        const r = pixels[index];
+                        const g = pixels[index + 1];
+                        const b = pixels[index + 2];
+                        const a = pixels[index + 3];
+                        // Approximate dark red check — not exact match for performance and tolerance
+                        if (r >= 130 && r <= 140 && g < 20 && b < 20 && a > 200) {
+                            redPixelCount++;
+                        }
+                        sampleCount++;
+                    }
+                }
+                const coverage = redPixelCount / sampleCount;
+                return coverage;
+            }
+            function mergeBullets(arr) {
+                for (let i = 0; i < arr.length; i++) {
+                    const a = arr[i];
+                    for (let j = i + 1; j < arr.length; j++) {
+                        const b = arr[j];
+                        if (Math.abs(a.radius - b.radius) < 0.01) {
+                            const dx = a.x - b.x;
+                            const dy = a.y - b.y;
+                            const dist = Math.hypot(dx, dy);
+                            if (dist < a.radius + b.radius) {
+                                const pick = Math.random() < 0.5 ? a : b;
+                                const newVx = pick.vx * 0.95;
+                                const newVy = pick.vy * 0.95;
+                                const newX = (a.x + b.x) / 2;
+                                const newY = (a.y + b.y) / 2;
+                                const newRadius = a.radius * 1.25;
+                                const newOwner = a.owner === b.owner ? a.owner : 'neutral';
+                                arr.splice(j, 1);
+                                arr.splice(i, 1);
+                                arr.push({
+                                    x: newX,
+                                    y: newY,
+                                    vx: newVx,
+                                    vy: newVy,
+                                    radius: newRadius,
+                                    owner: newOwner,
+                                    bounces: Math.random() < 0.5 ? a.bounces : b.bounces
+                                });
+                                return mergeBullets(arr);
+                            }
+                        }
+                    }
+                }
+            }
+            function toUnit(pixels) {
+                return pixels * unitScale;
+            }
+            function draw() {
+                ctx.fillStyle = '#111';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Blood first
+                for (const s of bloodSplatters) {
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#800';
+                    ctx.fill();
+                }
+                // Player
+                ctx.beginPath();
+                ctx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#f00';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(blob.x, blob.y);
+                ctx.lineTo(mouse.x, mouse.y);
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+                // Bullets
+                for (const b of bullets) {
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f00';
+                    ctx.fill();
+                }
+                // Enemies
+                for (const enemy of enemies) {
+                    if (!enemy.alive) continue;
+                    ctx.beginPath();
+                    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff0';
+                    ctx.fill();
+                }
+                // Coverage counter
+                ctx.save();
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText('Coverage: ' + (coverage * 100).toFixed(1) + '%', canvas.width / 2, 30);
+                ctx.restore();
+                if (gameOver) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '48px sans-serif';
+                    ctx.textAlign = 'center';
+                    if (youWin) {
+                        ctx.fillText('YOU WIN! THE FLOOR RUNS RED', canvas.width / 2, canvas.height / 2);
+                    } else {
+                        coverage = checkBloodFlood();
+                        ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+                        ctx.save();
+                        ctx.font = '24px Arial';
+                        ctx.fillStyle = 'white';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('Coverage: ' + (coverage * 100).toFixed(1) + '%', canvas.width / 2, canvas.height / 2 + 40);
+                        ctx.restore();
+                    }
+                }
+            }
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+            function restartGame() {
+                blob.x = canvas.width / 2;
+                blob.y = canvas.height / 2;
+                bullets.length = 0;
+                enemies.length = 0;
+                bloodSplatters.length = 0;
+                gameOver = false;
+                youWin = false;
+            }
+            gameLoop();
+        }
+    </script>
+</body>
+</html>
