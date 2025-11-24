@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbit Rhythm</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin: 0 0 10px 0;
+            color: #ddd;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        #score {
+            font-size: 48px;
+            font-weight: 900;
+            color: #fff;
+            margin-top: 5px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        #overlay-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        /* Start Button Style */
+        .btn {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 50px;
+            border: 2px solid #fff;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            pointer-events: auto;
+            text-transform: uppercase;
+            transition: transform 0.1s;
+            display: block;
+        }
+
+        .btn:hover {
+            background: #222;
+            transform: scale(1.05);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Countdown Style */
+        #countdown {
+            font-size: 120px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 20px #0ff;
+            display: none;
+        }
+
+        /* Speed Up Float Text */
+        .float-text {
+            position: absolute;
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 24px;
+            animation: floatUp 1s forwards;
+            pointer-events: none;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ui">
+        <div id="score">0</div>
+    </div>
+
+    <div id="overlay-msg">
+        <div id="start-btn" class="btn">Click to Start</div>
+        <div id="countdown">3</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiScore = document.getElementById('score');
+        const overlayMsg = document.getElementById('overlay-msg');
+        const startBtn = document.getElementById('start-btn');
+        const countdownEl = document.getElementById('countdown');
+
+        // Configuration
+        const TILE_SIZE = 60;
+        const ORBIT_RADIUS = TILE_SIZE;
+        const BASE_SPEED = 0.08;
+        const TOLERANCE = 1;
+        const SPEED_INCREMENT = 0.02; // How much faster every 25 tiles
+        const SPEED_COMMONNESS = 25;
+
+        // State
+        let isPlaying = false;
+        let isCountingDown = false;
+        let score = 0;
+        let tiles = [];
+        let currentTileIndex = 0;
+        let angle = 0;
+        let rotationDirection = 1;
+        let speed = BASE_SPEED;
+        let isRedAnchored = true;
+        let cameraX = 0;
+        let cameraY = 0;
+        let gameOver = false;
+
+        // Audio
+        let audioCtx;
+        let metronomeTimer; // Store the timer ID
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const now = audioCtx.currentTime;
+
+            if (type === 'hit') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(330, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'speed') {
+                // Powerup sound
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.001, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'fail') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.001, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1000, now); // High pitch crisp click
+
+                // Instant attack, sharp decay
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+        }
+
+        function startMetronome() {
+            // Clear any existing timer to prevent duplicates
+            clearTimeout(metronomeTimer);
+
+            function tick() {
+                if (!isPlaying || gameOver) return;
+
+                // 1. Play the Click
+                playSound('click');
+
+                // 2. Calculate time until next beat based on CURRENT speed
+                // Math: One beat is PI radians (180 degrees).
+                // Speed is radians per frame (at 60FPS).
+                // Frames per beat = Math.PI / speed
+                // MS per beat = Frames * (1000 / 60)
+                const msPerBeat = (Math.PI / speed) * (1000 / 60);
+
+                // 3. Schedule next tick
+                metronomeTimer = setTimeout(tick, msPerBeat);
+            }
+
+            // Start immediately
+            tick();
+        }
+
+        function stopMetronome() {
+            clearTimeout(metronomeTimer);
+        }
+
+        function generateLevel() {
+            tiles = [{ x: 0, y: 0, dir: 0 }];
+            let x = 0;
+            let y = 0;
+            let currentDir = 0;
+
+            // Generate a longer buffer
+            for (let i = 0; i < 1000;) {
+                const rand = Math.random();
+                if (rand < 0.2) currentDir = (currentDir + 1) % 4;
+                else if (rand < 0.4) currentDir = (currentDir + 3) % 4;
+                else if (rand > 0.95 && currentDir !== 2) {
+                    //make half hexagon
+                    const a = 1;
+                    const h = -a/2;
+                    const k = Math.sqrt(3)*a/2;
+                    x += 1;
+                    tiles.push({ x, y });
+                    tiles.push({ x: x + a + h, y: y - k });
+                    tiles.push({ x: x, y: y - k * 2 });
+                    tiles.push({ x: x - 1, y: y - k * 2 });
+                    x -= 1;
+                    y -= k * 2;
+                    currentDir = 2;
+                    i +=4;
+                    continue;
+                } else if (rand > 0.9 && currentDir !== 2) {
+                    //make triangle
+                    const a = 1;
+                    const h = -a/2;
+                    const k = Math.sqrt(3)*a/2;
+                    x += 1;
+                    tiles.push({ x, y });
+                    tiles.push({ x: x - a - h, y: y - k });
+                    tiles.push({ x: x - 1 , y: y });
+                    tiles.push({ x: x, y });
+                    currentDir = 0;
+                    i +=4;
+                    continue;
+                }
+                if (currentDir === 0) x += 1;
+                else if (currentDir === 1) y += 1;
+                else if (currentDir === 2) x -= 1;
+                else if (currentDir === 3) y -= 1;
+
+                tiles.push({ x, y, dir: currentDir });
+                i++;
+            }
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function prepareGame() {
+            initAudio();
+            startBtn.style.display = "none";
+
+            // Reset Vars
+            score = 0;
+            uiScore.innerText = "0";
+            currentTileIndex = 0;
+            isRedAnchored = true;
+            angle = Math.PI;
+            rotationDirection = 1;
+            speed = BASE_SPEED;
+            gameOver = false;
+            cameraX = 0;
+            cameraY = 0;
+            generateLevel();
+
+            // Start Countdown
+            isCountingDown = true;
+            countdownEl.style.display = "block";
+
+            let count = 3;
+            countdownEl.innerText = count;
+
+            // Beat sound for countdown
+            playSound('hit');
+
+            let timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownEl.innerText = count;
+                    playSound('hit');
+                } else if (count === 0) {
+                    countdownEl.innerText = "GO!";
+                    isCountingDown = false;
+                    isPlaying = true;
+                    playSound('speed'); // Go sound
+                } else {
+                    clearInterval(timer);
+                    countdownEl.style.display = "none";
+                    //startMetronome();
+                }
+            }, (Math.PI / (speed * 60)) * 1000); // Sync with speed
+        }
+
+        function handleInput() {
+            if (isCountingDown || gameOver) return;
+            if (!isPlaying) {
+                prepareGame();
+                return;
+            }
+
+            // Safety check
+            if (!tiles.length) return;
+
+            const currentTile = tiles[currentTileIndex];
+            const nextTile = tiles[currentTileIndex + 1];
+
+            if (!nextTile) {
+                generateLevel();
+                return;
+            }
+
+            const dx = nextTile.x - currentTile.x;
+            const dy = nextTile.y - currentTile.y;
+            let targetAngle = Math.atan2(dy, dx);
+
+            // Angle Normalization Logic
+            let normalizedCurrent = angle % (Math.PI * 2);
+            if (normalizedCurrent < 0) normalizedCurrent += Math.PI * 2;
+
+            let normalizedTarget = targetAngle;
+            if (normalizedTarget < 0) normalizedTarget += Math.PI * 2;
+
+            let diff = Math.abs(normalizedCurrent - normalizedTarget);
+            if (diff > Math.PI) diff = (Math.PI * 2) - diff;
+
+            if (diff < TOLERANCE) {
+                successHit(targetAngle, diff);
+            } else {
+                failGame();
+            }
+        }
+
+        function successHit(targetAngle, diff) {
+            score++;
+            uiScore.innerText = score;
+            currentTileIndex++;
+            isRedAnchored = !isRedAnchored;
+
+            // 1. Speed up check (Every 25 tiles)
+            if (score % SPEED_COMMONNESS === 0) {
+                speed += SPEED_INCREMENT;
+                playSound('speed');
+                showFloatText("SPEED UP!");
+            } else {
+                playSound('hit');
+            }
+
+            // 2. Reset Angle to "Start" of next orbit (180 degrees from target)
+            angle = targetAngle + Math.PI /*- diff*/;
+        }
+
+        function showFloatText(text) {
+            const el = document.createElement('div');
+            el.className = 'float-text';
+            el.innerText = text;
+            el.style.justifySelf = 'center';
+            el.style.top = '40%';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function failGame() {
+            stopMetronome();
+            playSound('fail');
+            gameOver = true;
+            isPlaying = false;
+            startBtn.innerHTML = "GAME OVER<br><span style='font-size:16px'>Score: " + score + "</span><br><span style='font-size:12px; color:#aaa'>Click to Restart</span>";
+            startBtn.style.display = "block";
+            overlayMsg.style.display = "block";
+        }
+
+        document.addEventListener('keydown', (e) => {
+            handleInput();
+        });
+        document.addEventListener('mousedown', handleInput);
+        document.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); }, { passive: false });
+
+        startBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent triggering game input immediately
+            prepareGame();
+        });
+
+        function update() {
+            if (!isPlaying || gameOver) return;
+
+            angle += speed * rotationDirection;
+
+            const currentTile = tiles[currentTileIndex];
+            const nextTile = tiles[currentTileIndex + 1];
+
+            if (nextTile) {
+                const dx = nextTile.x - currentTile.x;
+                const dy = nextTile.y - currentTile.y;
+                let targetAngle = Math.atan2(dy, dx);
+
+                // --- THE FIX FOR WRAPPING ---
+                let diff = angle - targetAngle;
+                while (diff <= -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+
+                // Safety Cap (1.5 rads). If diff is huge, we are just starting the orbit, not failing.
+                //if (diff > 0 && diff < 1.5) handleInput();
+                if (rotationDirection > 0) {
+                    if (diff > TOLERANCE && diff < 1.5) failGame();;
+                } else {
+                    if (diff < -TOLERANCE && diff > -1.5) failGame();
+                }
+                // ----------------------------
+
+            } else {
+                generateLevel();
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = "#050505";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Background grid (very faint)
+            ctx.strokeStyle = "#111";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const gridSize = 50;
+            const offsetX = (canvas.width / 2 - cameraX) % gridSize;
+            const offsetY = (canvas.height / 2 - cameraY) % gridSize;
+            for (let x = offsetX; x < canvas.width; x += gridSize) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let y = offsetY; y < canvas.height; y += gridSize) {
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+
+            // Camera Follow
+            if (tiles[currentTileIndex]) {
+                const targetX = tiles[currentTileIndex].x * TILE_SIZE;
+                const targetY = tiles[currentTileIndex].y * TILE_SIZE;
+                cameraX += (targetX - cameraX) * 0.1;
+                cameraY += (targetY - cameraY) * 0.1;
+            }
+
+            const cx = canvas.width / 2 - cameraX;
+            const cy = canvas.height / 2 - cameraY;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            // Draw Path
+            if (tiles.length > 0) {
+                // Visible Range Settings
+                const lookBack = 2;
+                const lookAhead = 12; // How many tiles ahead you can see
+
+                const startIdx = Math.max(0, currentTileIndex - lookBack);
+                const endIdx = Math.min(tiles.length, currentTileIndex + lookAhead);
+
+                // 1. Draw Connections (Interleaved Algorithm)
+
+                // Helper: Draw just the colored outline of a segment
+                function drawOutline(i) {
+                    if (i < 0 || i >= tiles.length - 1) return;
+
+                    // Opacity Calculation
+                    const dist = i - currentTileIndex;
+                    let opacity = 1;
+                    if (dist > 6) opacity = 1 - ((dist - 6) / 4);
+                    if (opacity < 0) opacity = 0;
+                    ctx.globalAlpha = opacity;
+
+                    const isSpeed = (i % SPEED_COMMONNESS === 0 && i !== 0);
+                    ctx.strokeStyle = "#555";
+                    ctx.lineWidth = TILE_SIZE * 0.4; // Thick Border
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+
+                    ctx.beginPath();
+                    ctx.moveTo(tiles[i].x * TILE_SIZE, tiles[i].y * TILE_SIZE);
+                    ctx.lineTo(tiles[i + 1].x * TILE_SIZE, tiles[i + 1].y * TILE_SIZE);
+                    ctx.stroke();
+                }
+
+                // Helper: Draw just the inner road of a segment
+                function drawInner(i) {
+                    if (i < 0 || i >= tiles.length - 1) return;
+
+                    // Opacity Calculation
+                    const dist = i - currentTileIndex;
+                    let opacity = 1;
+                    if (dist > 6) opacity = 1 - ((dist - 6) / 4);
+                    if (opacity < 0) opacity = 0;
+                    ctx.globalAlpha = opacity;
+
+                    ctx.strokeStyle = "#222"; // Dark Road
+                    ctx.lineWidth = TILE_SIZE * 0.3; // Thin Inner
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+
+                    ctx.beginPath();
+                    ctx.moveTo(tiles[i].x * TILE_SIZE, tiles[i].y * TILE_SIZE);
+                    ctx.lineTo(tiles[i + 1].x * TILE_SIZE, tiles[i + 1].y * TILE_SIZE);
+                    ctx.stroke();
+                }
+
+                // --- THE ALGORITHM ---
+                // We render from Back (Furthest visible) to Front (Player)
+                // Sequence: Outline(N), Outline(N-1), Inner(N), Outline(N-2), Inner(N-1)...
+
+                const lastVisible = endIdx - 1;
+
+                // 1. Start with the very last outline
+                drawOutline(lastVisible);
+
+                // 2. Loop backwards
+                for (let i = lastVisible; i > startIdx; i--) {
+                    drawOutline(i - 1); // Draw the outline "behind" the current one
+                    drawInner(i);       // Draw the inner of the current one (covers the outline we just drew)
+                }
+
+                // 3. Finish with the closest inner tile
+                drawInner(startIdx);
+
+                // 2. Draw Tiles
+                ctx.lineWidth = 2;
+                for (let i = startIdx; i < endIdx; i++) {
+                    // Fog of War
+                    const dist = i - currentTileIndex;
+                    let opacity = 1;
+                    if (dist > 6) opacity = 1 - ((dist - 6) / 4);
+                    if (opacity < 0) opacity = 0;
+                    ctx.globalAlpha = opacity;
+
+                    const tx = tiles[i].x * TILE_SIZE;
+                    const ty = tiles[i].y * TILE_SIZE;
+
+                    // Speed Marker Check
+                    const isSpeedTile = (i % SPEED_COMMONNESS === 0 && i !== 0);
+
+                    ctx.strokeStyle = isSpeedTile ? "#ffd700" : "#444";
+                    ctx.strokeRect(tx - TILE_SIZE / 3, ty - TILE_SIZE / 3, TILE_SIZE / 1.5, TILE_SIZE / 1.5);
+
+                    if (isSpeedTile) {
+                        ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+                        ctx.fillRect(tx - TILE_SIZE / 3, ty - TILE_SIZE / 3, TILE_SIZE / 1.5, TILE_SIZE / 1.5);
+
+                        // Draw chevron
+                        ctx.fillStyle = "#ffd700";
+                        ctx.font = "20px Arial";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText(">>", tx, ty);
+                    }
+
+                    // Highlight active
+                    if (i === currentTileIndex) {
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+                        ctx.fillRect(tx - TILE_SIZE / 3, ty - TILE_SIZE / 3, TILE_SIZE / 1.5, TILE_SIZE / 1.5);
+                    }
+                }
+            }
+
+            ctx.globalAlpha = 1; // Reset opacity for planets
+
+            // Draw Planets
+            if (tiles[currentTileIndex]) {
+                const anchorTile = tiles[currentTileIndex];
+                const ax = anchorTile.x * TILE_SIZE;
+                const ay = anchorTile.y * TILE_SIZE;
+
+                const orbiterX = ax + Math.cos(angle) * ORBIT_RADIUS;
+                const orbiterY = ay + Math.sin(angle) * ORBIT_RADIUS;
+
+                // Draw Anchor
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = isRedAnchored ? "#ff4444" : "#44ccff";
+                ctx.fillStyle = isRedAnchored ? "#ff4444" : "#44ccff";
+                ctx.beginPath();
+                ctx.arc(ax, ay, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw Orbiter
+                ctx.shadowColor = !isRedAnchored ? "#ff4444" : "#44ccff";
+                ctx.fillStyle = !isRedAnchored ? "#ff4444" : "#44ccff";
+                ctx.beginPath();
+                ctx.arc(orbiterX, orbiterY, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Connector
+                ctx.beginPath();
+                ctx.strokeStyle = "rgba(255,255,255,0.6)";
+                ctx.lineWidth = 4;
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(orbiterX, orbiterY);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+            requestAnimationFrame(draw);
+        }
+
+        // Start loops
+        setInterval(update, 1000 / 60);
+        requestAnimationFrame(draw);
+
+    </script>
+</body>
+
+</html>
