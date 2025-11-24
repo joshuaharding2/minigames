@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Golf 2D</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
+            font-family: 'Segoe UI', sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333;
+            pointer-events: none;
+        }
+        h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; }
+        p { margin: 5px 0 0 0; font-size: 14px; opacity: 0.7; }
+        #message {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 4px 0 rgba(0,0,0,0.2);
+            display: none;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>Infinite Golf</h1>
+        <p>Hole: <span id="hole-num">1</span> | Shots: <span id="shots">0</span></p>
+        <p style="font-size: 12px; margin-top: 5px;">Drag & Release to Shoot</p>
+        <p id="status" style="font-size: 12px; font-weight:bold; color:green; display:none;">READY</p>
+    </div>
+
+    <div id="message">HOLE IN ONE!</div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiHole = document.getElementById('hole-num');
+    const uiShots = document.getElementById('shots');
+    const uiStatus = document.getElementById('status');
+    const msgEl = document.getElementById('message');
+
+    // Game Constants
+    const SUB_STEPS = 8; // Higher = more precise physics
+    const GRAVITY = 0.25; 
+    const FRICTION_AIR = 0.995;
+    const FRICTION_GROUND = 0.97;
+    const BALL_RADIUS = 6;
+    const MAX_POWER = 15;
+
+    // State
+    let width, height;
+    let cameraX = 0;
+    let holeCount = 1;
+    let shotCount = 0;
+    let isDragging = false;
+    let dragStart = {x: 0, y: 0};
+    let dragCurrent = {x: 0, y: 0};
+    let canShoot = true;
+    let isWinning = false;
+    let lastStablePos = {x: 100, y: 100}; // Safety reset point
+
+    // Objects
+    let ball = {
+        x: 100,
+        y: 100,
+        vx: 0,
+        vy: 0,
+        isSleeping: false
+    };
+
+    let terrain = []; 
+    let hole = { x: 0, y: 0, radius: 12 };
+
+    // --- AUDIO ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playSound(type) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const now = audioCtx.currentTime;
+
+        if (type === 'hit') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+            gain.gain.setValueAtTime(0.5, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        } else if (type === 'win') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+            osc.start(now);
+            osc.stop(now + 0.4);
+        } else if (type === 'reset') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.2);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        }
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+    }
+
+    // --- GENERATION ---
+    function generateLevel() {
+        terrain = [];
+        const segmentWidth = 20;
+        const totalWidth = 3000; 
+        
+        let x = 0;
+        let baseY = height * 0.7;
+        
+        const freq1 = 0.005 + Math.random() * 0.01;
+        const freq2 = 0.02 + Math.random() * 0.02;
+        
+        while (x <= totalWidth) {
+            let y = baseY;
+            if (x > 200 && x < totalWidth - 200) {
+                const h1 = Math.sin(x * freq1) * 100;
+                const h2 = Math.sin(x * freq2) * 30;
+                y = baseY + h1 + h2;
+            }
+            terrain.push({x, y});
+            x += segmentWidth;
+        }
+
+        ball.x = 100;
+        ball.y = terrain[5].y - 50;
+        ball.vx = 0;
+        ball.vy = 0;
+        ball.isSleeping = false;
+        lastStablePos = {x: ball.x, y: ball.y};
+        canShoot = true;
+        isWinning = false;
+
+        let holeIndex = Math.floor((terrain.length - 10) - (Math.random() * 20));
+        let p2 = terrain[holeIndex];
+        
+        // Flatten area around hole
+        const holeY = p2.y;
+        terrain[holeIndex-1].y = holeY;
+        terrain[holeIndex+1].y = holeY;
+        terrain[holeIndex-2].y = holeY;
+        terrain[holeIndex+2].y = holeY; 
+        
+        hole.x = p2.x;
+        hole.y = holeY;
+
+        shotCount = 0;
+        uiShots.innerText = shotCount;
+        cameraX = 0;
+        msgEl.style.display = 'none';
+        uiStatus.style.display = 'block';
+    }
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        if (terrain.length === 0) generateLevel();
+    }
+    window.addEventListener('resize', resize);
+
+    // --- PHYSICS ENGINE ---
+
+    function update() {
+        if (isWinning) return;
+
+        // Sub-stepping loop for stability
+        // We divide the frame into smaller chunks to catch collisions
+        const dt = 1 / SUB_STEPS;
+        
+        for (let step = 0; step < SUB_STEPS; step++) {
+            if (!ball.isSleeping) {
+                // 1. Gravity (Scaled by sub-step)
+                ball.vy += GRAVITY * dt;
+                
+                // 2. Air Friction (Applied once per full frame, or scaled? 
+                // Scaled is complex, let's just apply small friction per sub-step)
+                ball.vx *= Math.pow(FRICTION_AIR, dt);
+                ball.vy *= Math.pow(FRICTION_AIR, dt);
+
+                // 3. Move Ball (Scaled)
+                ball.x += ball.vx * dt;
+                ball.y += ball.vy * dt;
+
+                // 4. Boundary Walls (Left/Right)
+                if (ball.x < BALL_RADIUS) {
+                    ball.x = BALL_RADIUS;
+                    ball.vx *= -0.8;
+                } else if (ball.x > terrain[terrain.length-1].x - BALL_RADIUS) {
+                    ball.x = terrain[terrain.length-1].x - BALL_RADIUS;
+                    ball.vx *= -0.8;
+                }
+
+                // 5. Terrain Collision
+                const gridX = Math.floor(ball.x / 20);
+                const searchRange = 2;
+                let didCollide = false;
+
+                // Safe array access
+                const startI = Math.max(0, gridX - searchRange);
+                const endI = Math.min(terrain.length - 1, gridX + searchRange);
+
+                for (let i = startI; i < endI; i++) {
+                    const p1 = terrain[i];
+                    const p2 = terrain[i+1];
+
+                    if (ball.x >= p1.x && ball.x <= p2.x) {
+                        const t = (ball.x - p1.x) / (p2.x - p1.x);
+                        const groundY = p1.y + t * (p2.y - p1.y);
+                        
+                        // Check if ball is touching or below ground
+                        if (ball.y + BALL_RADIUS >= groundY) {
+                            didCollide = true;
+                            
+                            // 1. Calculate Normal
+                            const segDX = p2.x - p1.x;
+                            const segDY = p2.y - p1.y;
+                            const segLen = Math.sqrt(segDX*segDX + segDY*segDY);
+                            const normX = -segDY / segLen;
+                            const normY = segDX / segLen;
+
+                            // 2. Position Correction (Pop up)
+                            // We pop fully to surface
+                            ball.y = groundY - BALL_RADIUS;
+                            
+                            // 3. Bounce
+                            const dot = ball.vx * normX + ball.vy * normY;
+                            if (dot < 0) {
+                                // Reflect
+                                ball.vx = (ball.vx - 2 * dot * normX) * 0.5; // Bounciness
+                                ball.vy = (ball.vy - 2 * dot * normY) * 0.5;
+                                
+                                // Ground Friction
+                                const tangX = -normY;
+                                const tangY = normX;
+                                const dotTang = ball.vx * tangX + ball.vy * tangY;
+                                ball.vx = tangX * dotTang * FRICTION_GROUND;
+                                ball.vy = tangY * dotTang * FRICTION_GROUND;
+                            }
+                        }
+                    }
+                }
+
+                // Sleep Check (Only at end of sub-steps or if very slow)
+                const speed = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+                if (speed < 0.1 && didCollide) {
+                    ball.isSleeping = true;
+                    ball.vx = 0;
+                    ball.vy = 0;
+                    canShoot = true;
+                    lastStablePos = {x: ball.x, y: ball.y}; // Save checkpoint
+                    uiStatus.style.display = 'block';
+                } else {
+                    // Check if we stopped moving for other reasons
+                    canShoot = speed < 0.2 && didCollide;
+                    if(canShoot) uiStatus.style.display = 'block';
+                    else uiStatus.style.display = 'none';
+                }
+            }
+        } // End Sub-step
+
+        // Win Logic
+        const dx = ball.x - hole.x;
+        const dy = ball.y - hole.y;
+        if (Math.sqrt(dx*dx + dy*dy) < hole.radius && Math.abs(ball.vx) < 5) {
+            winHole();
+        }
+
+        // Void Reset (Safety Net)
+        if (ball.y > height + 200) {
+            playSound('reset');
+            ball.x = lastStablePos.x;
+            ball.y = lastStablePos.y - 20;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.isSleeping = true;
+            canShoot = true;
+            uiStatus.style.display = 'block';
+        }
+    }
+
+    function winHole() {
+        if (isWinning) return;
+        isWinning = true;
+        playSound('win');
+        msgEl.innerText = shotCount === 1 ? "HOLE IN ONE!" : "NICE SHOT!";
+        msgEl.style.display = "block";
+        setTimeout(() => {
+            holeCount++;
+            uiHole.innerText = holeCount;
+            generateLevel();
+        }, 2000);
+    }
+
+    // --- INPUT ---
+    canvas.addEventListener('mousedown', e => {
+        if (!canShoot || isWinning) return;
+        console.log("2");
+        isDragging = true;
+        dragStart.x = e.clientX;
+        dragStart.y = e.clientY;
+        dragCurrent.x = e.clientX;
+        dragCurrent.y = e.clientY;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+        if (isDragging) {
+            dragCurrent.x = e.clientX;
+            dragCurrent.y = e.clientY;
+        }
+    });
+
+    window.addEventListener('mouseup', e => {
+        handleShoot();
+    });
+    
+    canvas.addEventListener('touchstart', e => {
+        if (!canShoot || isWinning) return;
+        e.preventDefault();
+        isDragging = true;
+        dragStart.x = e.touches[0].clientX;
+        dragStart.y = e.touches[0].clientY;
+        dragCurrent.x = dragStart.x;
+        dragCurrent.y = dragStart.y;
+    }, {passive: false});
+
+    canvas.addEventListener('touchmove', e => {
+        if (isDragging) {
+            e.preventDefault();
+            dragCurrent.x = e.touches[0].clientX;
+            dragCurrent.y = e.touches[0].clientY;
+        }
+    }, {passive: false});
+
+    window.addEventListener('touchend', e => {
+        handleShoot();
+    });
+
+    function handleShoot() {
+        if (isDragging) {
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const power = Math.min(dist * 0.15, MAX_POWER);
+            const angle = Math.atan2(dy, dx);
+            
+            if (power > 1) {
+                ball.vx = Math.cos(angle) * power;
+                ball.vy = Math.sin(angle) * power;
+                ball.isSleeping = false;
+                canShoot = false;
+                shotCount++;
+                uiShots.innerText = shotCount;
+                uiStatus.style.display = 'none';
+                playSound('hit');
+            }
+            isDragging = false;
+        }
+    }
+
+    // --- DRAWING ---
+    function draw() {
+        ctx.fillStyle = "#87CEEB"; 
+        ctx.clearRect(0,0,width,height);
+
+        let targetCamX = ball.x - width / 3;
+        cameraX += (targetCamX - cameraX) * 0.1; 
+
+        ctx.save();
+        ctx.translate(-cameraX, 0);
+
+        // Draw Ground
+        ctx.beginPath();
+        ctx.fillStyle = "#4CAF50";
+        ctx.strokeStyle = "#2E7D32";
+        ctx.lineWidth = 4;
+        
+        if (terrain.length > 0) {
+            ctx.moveTo(terrain[0].x, height + 500); 
+            ctx.lineTo(terrain[0].x, terrain[0].y); 
+            
+            for (let i = 1; i < terrain.length; i++) {
+                ctx.lineTo(terrain[i].x, terrain[i].y);
+            }
+            
+            ctx.lineTo(terrain[terrain.length-1].x, height + 500); 
+            ctx.fill();
+            ctx.stroke();
+        }
+        
+        // Draw Flag & Hole
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.ellipse(hole.x, hole.y + 2, hole.radius, hole.radius/3, 0, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 3;
+        ctx.moveTo(hole.x, hole.y);
+        ctx.lineTo(hole.x, hole.y - 60);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.fillStyle = "#FF5252";
+        ctx.moveTo(hole.x, hole.y - 60);
+        ctx.lineTo(hole.x + 25, hole.y - 50);
+        ctx.lineTo(hole.x, hole.y - 40);
+        ctx.fill();
+
+        // Draw Ball
+        ctx.beginPath();
+        ctx.fillStyle = "white";
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = "rgba(0,0,0,0.2)";
+        ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.fillStyle = "#ddd";
+        ctx.beginPath();
+        ctx.arc(ball.x - 2, ball.y - 2, 1, 0, Math.PI*2);
+        ctx.fill();
+
+        // Draw Drag Line
+        if (isDragging && canShoot) {
+            let dx = dragStart.x - dragCurrent.x;
+            let dy = dragStart.y - dragCurrent.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const scale = Math.min(dist, 150) / dist || 0; 
+            const arrowX = ball.x + dx * scale * 0.5; 
+            const arrowY = ball.y + dy * scale * 0.5;
+
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 4;
+            ctx.moveTo(ball.x, ball.y);
+            ctx.lineTo(arrowX, arrowY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.fillStyle = "white";
+            ctx.arc(arrowX, arrowY, 4, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+        requestAnimationFrame(update);
+        requestAnimationFrame(draw);
+    }
+
+    resize();
+    requestAnimationFrame(update);
+    requestAnimationFrame(draw);
+
+</script>
+</body>
+</html>
