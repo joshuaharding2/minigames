@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minigame Library</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #aaaaaa;
+            --accent: #bb86fc;
+            --accent-hover: #9955e8;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            max-width: 800px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            background: linear-gradient(45deg, #bb86fc, #03dac6);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            margin-top: 0;
+        }
+
+        /* Grid Layout */
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+            padding: 20px;
+            width: 100%;
+            max-width: 1200px;
+            box-sizing: border-box;
+        }
+
+        /* Game Cards */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            color: inherit;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            border-color: var(--accent);
+        }
+
+        .card-preview {
+            height: 180px;
+            background: #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+        }
+
+        .card-content {
+            padding: 20px;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 0 0 10px 0;
+            color: var(--accent);
+        }
+
+        .card-desc {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        /* Specific Card Styles */
+        .BWaG-bg { background: linear-gradient(135deg, #eaff00, #00ff04); }
+        .bouncing-block-bg { background: linear-gradient(135deg, #eaff00, #ffffff); }
+        .blockade-bg { background: linear-gradient(135deg, #0077ff, #ff0000); }
+        .rhythm-bg { background: linear-gradient(135deg, #ff4444, #44ccff); }
+        .golf-bg { background: linear-gradient(135deg, #4CAF50, #87CEEB); }
+        .wip-bg { background: #333; color: #555; }
+
+        footer {
+            margin-top: auto;
+            padding: 40px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Minigame Arcade</h1>
+        <p class="subtitle">A collection of single-file canvas experiments.</p>
+    </header>
+
+    <div class="game-grid">
+
+        <a href="BWaG.html" class="card">
+            <div class="card-preview BWaG-bg">
+                🔴
+            </div>
+            <div class="card-content">
+                <h2 class="card-title">Blob With a Gun</h2>
+                <p class="card-desc">
+                    A 2d bullet hell style game where you control a blob with a gun.
+                    Click to shoot and dodge incoming projectiles! Cover the floor with your enemies blood!
+                </p>
+            </div>
+        </a>
+
+        <a href="bouncing-block.html" class="card">
+            <div class="card-preview bouncing-block-bg">
+                🟨
+            </div>
+            <div class="card-content">
+                <h2 class="card-title">Bouncing Block</h2>
+                <p class="card-desc">
+                    A 2d singleplayer game where you climb as high as you can.
+                    Relaxing and simple gameplay where you control a bouncing block.
+                </p>
+            </div>
+        </a>
+
+        <a href="blockade.html" class="card">
+            <div class="card-preview blockade-bg">
+                🔵
+            </div>
+            <div class="card-content">
+                <h2 class="card-title">Blockade</h2>
+                <p class="card-desc">
+                    A 2d singleplayer game where you consume other circles to become the biggest.
+                    Velocity style movement with randomized spawns.
+                </p>
+            </div>
+        </a>
+
+        <!-- Game 1: Orbit Rhythm -->
+        <a href="adofai.html" class="card">
+            <div class="card-preview rhythm-bg">
+                🎵
+            </div>
+            <div class="card-content">
+                <h2 class="card-title">Orbit Rhythm</h2>
+                <p class="card-desc">
+                    A rhythm game inspired by <em>A Dance of Fire and Ice</em>. 
+                    Time your clicks to the beat as orbiting planets traverse a winding path.
+                </p>
+            </div>
+        </a>
+
+        <!-- Game 2: Infinite Golf -->
+        <a href="golf.html" class="card">
+            <div class="card-preview golf-bg">
+                ⛳
+            </div>
+            <div class="card-content">
+                <h2 class="card-title">Infinite Golf (not working lol)</h2>
+                <p class="card-desc">
+                    A physics-based golf game with procedural terrain generation. 
+                    Drag to shoot, handle slopes, and aim for the hole.
+                </p>
+            </div>
+        </a>
+
+        <!-- Placeholder for future games -->
+        <div class="card" style="opacity: 0.5; pointer-events: none;">
+            <div class="card-preview wip-bg">
+                🚧
+            </div>
+            <div class="card-content">
+                <h2 class="card-title" style="color: #666;">Coming Soon</h2>
+                <p class="card-desc">
+                    More canvas experiments coming soon.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>© 2025 Joshua Harding — All rights reserved.</p>
+    </footer>
+
+</body>
+</html>
